@@ -1,0 +1,33 @@
+name: AI Code Reviewer Pipeline
+#1.Tell Github when to run this automation
+on:
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize] #Runs when a PR is opened or updated
+jobs:
+  run-ai-reviewer:
+    runs-on: ubuntu-latest #Spin up a Linux environment temporarily to run the job
+    permissions:
+      contents: read #Read access to the repository contents
+      pull-requests: write #Write access to create PR comments
+    steps:
+      # Step A: Download the repository code on the virtual computer
+      - name: Checkout code
+        uses: actions/checkout@v4 #Checkout the code from the PR into the virtual environment
+      # Step B: Install Python on the cloud machine
+      - name: Set up Python
+        uses: actions/setup-python@v4 #Set up Python on the virtual environment
+        with:
+          python-version: '3.10'
+      # Step C: Install the project tools (google-genai and requests)
+      - name: Install project tools
+        run: |
+          pip -m pip install --upgrade pip
+          pip install -r requirements.txt #Install the project dependencies
+      # Step D: Run the AI code reviewer script
+      - name: Run Python Reviewer Script
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }} #Pass the OpenAI API key securely from GitHub Secrets
+        run: |
+          python review.py #Run the AI code reviewer script to analyze the PR changes and post comments 
