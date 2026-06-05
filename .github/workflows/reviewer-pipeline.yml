@@ -23,7 +23,7 @@ jobs:
       # Step C: Install the project tools (google-genai and requests)
       - name: Install project tools
         run: |
-          pip -m pip install --upgrade pip
+          python -m pip install --upgrade pip
           pip install -r requirements.txt #Install the project dependencies
       # Step D: Run the AI code reviewer script
       - name: Run Python Reviewer Script
