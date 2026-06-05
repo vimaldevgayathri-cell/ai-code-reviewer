@@ -1,39 +1,67 @@
 import os
+import json
+import requests
 from google import genai
-
-def analyze_code_locally():
-    #check if the API key is present in the environment variable(GOOGLE_API_KEY)
-    if not os.getenv("GOOGLE_API_KEY"):
-        print("Error: GOOGLE_API_KEY environment variable missing!.")
-        return
-    print("Initializing the GenAI client...")
-    #the client automatically looks for the API key in the environment variable
+def get_pr_diff_and_urls():
+    """Reads the cloud data file provided by GitHub Actions and extracts the PR diff and URLs."""
+    #GitHub automatically tells us where the data file is located via the GITHUB_EVENT_PATH environment variable.
+    event_path = os.getenv('GITHUB_EVENT_PATH')
+    if not event_path:
+        raise FileNotFoundError("GITHUB_EVENT_PATH environment variable is not set.")
+    #Open and read the giant text file full of PR data
+    with open(event_path, 'r') as f:
+        event_data = json.load(f)
+    #Extract the exact link showing what code chnanged
+    diff_url = event_data.get["pull_request"]["comments_url"]
+    #use the 'request' library to downlaod the raw code text change across the internet
+    #GitHub automatically provides a temporary token for us to use in the header to authenticate our request
+    headers = {
+        'Authorization': f'token {os.getenv("GITHUB_TOKEN")}'
+    }
+    response = requests.get(diff_url, headers=headers)
+    response.raise_for_status()  # Check if the request was successful
+    return response.text, comments_url
+def analyze_code_with_gemini(diff_text):
+    """Uses the Gemini API to analyze the code diff and generate a review."""
+    #Initialize the Gemini API client
     client = genai.Client()
-    #the code to be reviewed
-    # In a real-world scenario, you would read this from a file or another source
-    #2. this is a mock code snippet for demonstration purposes
-    mock_git_diff = """
-    def calculate_area(radius):
-        return 3.14159 * radius * radius
-    """
-    #3. create a prompt for the GenAI model
-    prompt=(
-        "You are a strict,helpful Senior Software Engineer. Review the provided git diff code."
-        "Point out any critical logical bugs, explain why it is a bug and provide a corrected version of the code."
+    system_instruction =(
+        "You are an expert Senior Software Engineer with 20 years of experience in code review. You have a deep understanding of software design principles, best practices, and common pitfalls. Your task is to analyze the provided code diff and generate a comprehensive code review that includes: \n"
+        "1. A summary of the changes made in the code diff.\n"
+        "2. An assessment of the code quality, including readability, maintainability, and adherence to best practices.\n"
+        "3. Identification of any potential bugs, security vulnerabilities, or performance issues introduced by the changes.\n"
+        "4. Suggestions for improvement, including specific recommendations for refactoring, optimization, or enhancement of the code.\n"
     )
-    print("Analyzing the code for bugs...")
-    #4. call the GenAI API to analyze the code
     response = client.models.generate_content(
         model='gemini-2.5-flash',
-        contents=f"Please review the following code and identify any critical logical bugs:\n\n{mock_git_diff}",
+        contents=f"Please review this git diff:\n\n{diff_text}",
         config={
-            "temperature":0.2, #keeps the ai analytical and focused on finding bugs rather than being creative
-            "system_instruction":prompt
+            "system_instruction": system_instruction,
+            "temperature": 0.2,
         }
     )
-    print("\n--- Analysis Result ---")
-    print(response.text)
+    return response.text
+def post_github_comment(review_text, comments_url):
+    """Posts the generated review as a comment on the GitHub PR."""
+    headers = {
+        'Authorization': f'token {os.getenv("GITHUB_TOKEN")}',
+        "Accept": "application/vnd.github.v3+json"
+    }
+    # Package our message into a neat JSON envelope to send to GitHub
+    payload={"body":f"### AI Code Reviewer Feedback:\n\n{review_text}"}
+    #Send it back to GitHub's servers
+    response = requests.post(comments_url, headers=headers, json=payload)
+    response.raise_for_status()  # Check if the request was successful
 if __name__ == "__main__":
-    analyze_code_locally()
-    
-
+    try:
+        print("Fetching code changes from Pull Request...")
+        diff_text, comments_url = get_pr_diff_and_urls()
+        print("Analyzing code changes with Gemini API...")
+        review_text = analyze_code_with_gemini(diff_text)
+        print("Posting review back to GitHub...")
+        post_github_comment(review_text, comments_url)
+        print("Code review posted successfully!")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        
+        
