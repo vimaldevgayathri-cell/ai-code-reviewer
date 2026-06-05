@@ -31,7 +31,7 @@ Whenever a developer opens or updates a Pull Request, this pipeline automaticall
 To securely connect the pipeline to Gemini without exposing your private API key, add your key to your GitHub repository secrets:
 * Go to your repository **Settings** -> **Secrets and variables** -> **Actions**.
 * Click **New repository secret**.
-* Name: `GEMINI_API_KEY`
+* Name: `GOOGLE_API_KEY`
 * Value: *Paste your Google AI Studio API key here*.
 
 ### 2. Local Testing
